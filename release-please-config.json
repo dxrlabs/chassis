@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "go",
+  "tag-separator": "/",
+  "include-component-in-tag": true,
+  "packages": {
+    "broker": { "component": "broker" },
+    "broker/nats": { "component": "broker/nats" },
+    "broker/kafka": { "component": "broker/kafka" },
+    "broker/rabbitmq": { "component": "broker/rabbitmq" },
+    "broker/pubsub": { "component": "broker/pubsub" },
+    "config": { "component": "config" },
+    "db/postgres": { "component": "db/postgres" },
+    "db/mysql": { "component": "db/mysql" },
+    "db/sqlite": { "component": "db/sqlite" },
+    "db/spanner": { "component": "db/spanner" },
+    "httpx": { "component": "httpx" },
+    "logger": { "component": "logger" },
+    "migrate": { "component": "migrate" },
+    "migrate/spanner": { "component": "migrate/spanner" },
+    "outbox": { "component": "outbox" },
+    "redis": { "component": "redis" },
+    "server": { "component": "server" },
+    "telemetry": { "component": "telemetry" },
+    "worker": { "component": "worker" }
+  }
+}

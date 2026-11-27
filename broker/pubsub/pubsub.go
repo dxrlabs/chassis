@@ -10,8 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/pubsub"
+	gcppubsub "cloud.google.com/go/pubsub/v2"
+	"cloud.google.com/go/pubsub/v2/apiv1/pubsubpb"
 	"github.com/dxrlabs/chassis/broker"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const drainTimeout = 10 * time.Second
@@ -30,14 +33,15 @@ func WithGroup(group string) Option {
 
 // Client is a GCP Pub/Sub-backed Publisher and Subscriber.
 type Client struct {
-	client  *pubsub.Client
+	client  *gcppubsub.Client
 	log     *slog.Logger
 	group   string
 	project string
 
-	mu      sync.Mutex
-	cancels []context.CancelFunc
-	wg      sync.WaitGroup
+	mu         sync.Mutex
+	publishers map[string]*gcppubsub.Publisher
+	cancels    []context.CancelFunc
+	wg         sync.WaitGroup
 }
 
 var _ broker.Bus = (*Client)(nil)
@@ -58,12 +62,18 @@ func New(ctx context.Context, projectID string, log *slog.Logger, opts ...Option
 		opt(&cfg)
 	}
 
-	client, err := pubsub.NewClient(ctx, projectID)
+	client, err := gcppubsub.NewClient(ctx, projectID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("pubsub: client: %w", err)
 	}
 
-	c := &Client{client: client, log: log, group: cfg.group, project: projectID}
+	c := &Client{
+		client:     client,
+		log:        log,
+		group:      cfg.group,
+		project:    projectID,
+		publishers: make(map[string]*gcppubsub.Publisher),
+	}
 	cleanup := func() { c.drainAndClose() }
 	log.Info("ready", "project", projectID, "group", cfg.group)
 	return c, cleanup, nil
@@ -71,12 +81,23 @@ func New(ctx context.Context, projectID string, log *slog.Logger, opts ...Option
 
 // Publish publishes payload to topic ID = subject (topic must already exist).
 func (c *Client) Publish(ctx context.Context, subject string, payload []byte) error {
-	topic := c.client.Topic(subject)
-	result := topic.Publish(ctx, &pubsub.Message{Data: payload})
+	pub := c.publisher(subject)
+	result := pub.Publish(ctx, &gcppubsub.Message{Data: payload})
 	if _, err := result.Get(ctx); err != nil {
 		return fmt.Errorf("pubsub: publish %s: %w", subject, err)
 	}
 	return nil
+}
+
+func (c *Client) publisher(subject string) *gcppubsub.Publisher {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if p, ok := c.publishers[subject]; ok {
+		return p
+	}
+	p := c.client.Publisher(subject)
+	c.publishers[subject] = p
+	return p
 }
 
 // Subscribe receives messages from topic = subject via a durable subscription.
@@ -86,21 +107,14 @@ func (c *Client) Subscribe(subject string, handler broker.Handler) error {
 	}
 
 	subID := c.group + "-" + subject
-	sub := c.client.Subscription(subID)
-	exists, err := sub.Exists(context.Background())
-	if err != nil {
-		return fmt.Errorf("pubsub: subscription exists: %w", err)
+	subName := fmt.Sprintf("projects/%s/subscriptions/%s", c.project, subID)
+	topicName := fmt.Sprintf("projects/%s/topics/%s", c.project, subject)
+
+	if err := c.ensureSubscription(context.Background(), subName, topicName); err != nil {
+		return err
 	}
-	if !exists {
-		topic := c.client.Topic(subject)
-		sub, err = c.client.CreateSubscription(context.Background(), subID, pubsub.SubscriptionConfig{
-			Topic:       topic,
-			AckDeadline: 20 * time.Second,
-		})
-		if err != nil {
-			return fmt.Errorf("pubsub: create subscription: %w", err)
-		}
-	}
+
+	sub := c.client.Subscriber(subName)
 
 	subCtx, cancel := context.WithCancel(context.Background())
 	c.mu.Lock()
@@ -110,9 +124,7 @@ func (c *Client) Subscribe(subject string, handler broker.Handler) error {
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		err := sub.Receive(subCtx, func(ctx context.Context, msg *pubsub.Message) {
-			c.wg.Add(1)
-			defer c.wg.Done()
+		err := sub.Receive(subCtx, func(ctx context.Context, msg *gcppubsub.Message) {
 			if err := handler(ctx, subject, msg.Data); err != nil {
 				c.log.Error("handler failed", "subject", subject, "err", err)
 				msg.Nack()
@@ -129,10 +141,39 @@ func (c *Client) Subscribe(subject string, handler broker.Handler) error {
 	return nil
 }
 
+func (c *Client) ensureSubscription(ctx context.Context, subName, topicName string) error {
+	_, err := c.client.SubscriptionAdminClient.GetSubscription(ctx, &pubsubpb.GetSubscriptionRequest{
+		Subscription: subName,
+	})
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) != codes.NotFound {
+		return fmt.Errorf("pubsub: get subscription: %w", err)
+	}
+	_, err = c.client.SubscriptionAdminClient.CreateSubscription(ctx, &pubsubpb.Subscription{
+		Name:               subName,
+		Topic:              topicName,
+		AckDeadlineSeconds: 20,
+	})
+	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil
+		}
+		return fmt.Errorf("pubsub: create subscription: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) drainAndClose() {
 	c.mu.Lock()
 	cancels := append([]context.CancelFunc(nil), c.cancels...)
+	pubs := make([]*gcppubsub.Publisher, 0, len(c.publishers))
+	for _, p := range c.publishers {
+		pubs = append(pubs, p)
+	}
 	c.mu.Unlock()
+
 	for _, cancel := range cancels {
 		cancel()
 	}
@@ -148,6 +189,9 @@ func (c *Client) drainAndClose() {
 		c.log.Warn("handler drain timed out", "timeout", drainTimeout)
 	}
 
+	for _, p := range pubs {
+		p.Stop()
+	}
 	_ = c.client.Close()
 	c.log.Info("closed")
 }

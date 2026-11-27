@@ -3,8 +3,9 @@ module github.com/dxrlabs/chassis/broker/pubsub
 go 1.26.0
 
 require (
-	cloud.google.com/go/pubsub v1.52.0
+	cloud.google.com/go/pubsub/v2 v2.9.0
 	github.com/dxrlabs/chassis/broker v0.0.0
+	google.golang.org/grpc v1.85.0
 )
 
 require (
@@ -13,7 +14,6 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.3.0 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
 	cloud.google.com/go/iam v1.14.0 // indirect
-	cloud.google.com/go/pubsub/v2 v2.6.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -43,7 +43,6 @@ require (
 	google.golang.org/genproto v0.0.0-20261012220534-4341edf3f941 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261110000943-09e21b237f2c // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261110000943-09e21b237f2c // indirect
-	google.golang.org/grpc v1.85.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 

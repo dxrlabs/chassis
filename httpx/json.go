@@ -19,7 +19,7 @@ func DecodeJSON[T any](r *http.Request) (T, error) {
 	if r.Body == nil {
 		return zero, fmt.Errorf("%w: empty body", ErrBadRequest)
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	limited := io.LimitReader(r.Body, maxBodyBytes+1)
 	raw, err := io.ReadAll(limited)

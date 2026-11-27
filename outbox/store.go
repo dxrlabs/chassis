@@ -261,7 +261,7 @@ func (s *SQLStore) loadByIDsTx(ctx context.Context, tx *sql.Tx, ids []int64, mys
 }
 
 func scanMessages(rows *sql.Rows) ([]Message, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Message
 	for rows.Next() {
 		var m Message

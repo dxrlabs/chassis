@@ -1,0 +1,21 @@
+{
+  "broker": "0.1.0",
+  "broker/nats": "0.1.0",
+  "broker/kafka": "0.1.0",
+  "broker/rabbitmq": "0.1.0",
+  "broker/pubsub": "0.1.0",
+  "config": "0.1.0",
+  "db/postgres": "0.1.0",
+  "db/mysql": "0.1.0",
+  "db/sqlite": "0.1.0",
+  "db/spanner": "0.1.0",
+  "httpx": "0.1.0",
+  "logger": "0.1.0",
+  "migrate": "0.1.0",
+  "migrate/spanner": "0.1.0",
+  "outbox": "0.1.0",
+  "redis": "0.1.0",
+  "server": "0.1.0",
+  "telemetry": "0.1.0",
+  "worker": "0.1.0"
+}

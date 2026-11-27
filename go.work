@@ -1,0 +1,25 @@
+go 1.26.0
+
+use (
+	./broker
+	./broker/kafka
+	./broker/nats
+	./broker/pubsub
+	./broker/rabbitmq
+	./config
+	./db/mysql
+	./db/postgres
+	./db/spanner
+	./db/sqlite
+	./examples/fullapp
+	./examples/sqliteapp
+	./httpx
+	./logger
+	./migrate
+	./migrate/spanner
+	./outbox
+	./redis
+	./server
+	./telemetry
+	./worker
+)
